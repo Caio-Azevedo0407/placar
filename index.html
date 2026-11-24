@@ -77,6 +77,13 @@ h3{font-size:15px;margin:0 0 4px}
 .ovt{font-variant-numeric:tabular-nums;color:var(--mut);margin:6px 0}
 .ovbox .acts button{flex:1;padding:15px;font-size:17px}
 .lblrow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.busy{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.busy>div{background:var(--card);border-radius:14px;padding:22px 18px;max-width:360px;text-align:center;font-size:17px}
+.giro{width:38px;height:38px;border:4px solid var(--bd);border-top-color:var(--pri);border-radius:50%;margin:0 auto 12px;animation:giro 1s linear infinite}
+@keyframes giro{to{transform:rotate(360deg)}}
+#iaRes ul{margin:6px 0 0;padding-left:20px}
+#recBox textarea{min-height:160px;font-size:14px}
+#busyTxt{white-space:pre-line}
 main{padding-bottom:96px}
 @media print{header,.noprint{display:none!important}main{padding:0}#rel{border:0;min-height:0}}
 </style>
@@ -105,13 +112,31 @@ main{padding-bottom:96px}
         <div class="acts"><button id="notaAdd">Salvar nota</button></div>
       </details>
     </div>
-    <div class="setor"><h2>Notas de hoje <span class="n" id="notaCont"></span></h2><button class="mini pri" id="distrib">Distribuir nas fichas</button></div>
-    <div id="notas"></div>
-    <p class="nota">“Distribuir” coloca cada nota no campo “Hoje” do paciente cujo nome aparece no começo da fala (ou pelo “leito 12”). As que não forem reconhecidas ficam aqui para você escolher o paciente.</p>
+    <div class="setor"><h2>Notas de hoje <span class="n" id="notaCont"></span></h2></div>
+    <div class="acts" style="margin-top:0">
+      <button class="pri" id="btnIA">✨ Organizar com IA</button>
+      <button class="mini" id="distrib">Distribuir sem IA</button>
+      <button class="mini hide" id="btnDesf">↩ Desfazer organização</button>
+    </div>
+    <div id="iaRes" class="card hide" style="margin-top:10px"></div>
+    <div id="notas" style="margin-top:10px"></div>
+    <p class="nota">“Organizar com IA” lê as notas novas, acha (ou cria) cada paciente e escreve o “Hoje” no estilo do placar. Confira sempre doses e números antes de enviar.</p>
   </section>
 
   <!-- PACIENTES -->
   <section id="vP" class="hide">
+    <div class="card noprint">
+      <button class="pri" id="btnRec" style="width:100%">📥 Recebi um placar no grupo</button>
+      <div id="recBox" class="hide">
+        <p class="nota">No WhatsApp, segure a mensagem do placar → Copiar. Depois toque em “Colar do WhatsApp”. O placar recebido vira a base: históricos atualizados, pacientes novos incluídos, altas retiradas.</p>
+        <textarea id="recTxt" placeholder="Placar DD/MM&#10;#PAM:#&#10;1 - ..."></textarea>
+        <div class="acts">
+          <button id="recColar">📋 Colar do WhatsApp</button>
+          <button class="pri" id="recOk">Usar como base</button>
+          <button id="recCancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <div class="row">
         <div><label>Data do placar</label><input type="date" id="data"></div>
@@ -139,6 +164,10 @@ main{padding-bottom:96px}
       <button id="compart">Enviar (WhatsApp…)</button>
       <button id="imprimir">Imprimir / PDF</button>
     </div>
+    <div class="acts noprint hide" id="resIABox" style="margin-top:0;margin-bottom:10px">
+      <button class="pri" id="btnResIA">✨ Gerar resumido com IA</button>
+      <span class="nota" id="resIAInfo"></span>
+    </div>
     <textarea id="rel" readonly></textarea>
     <p class="nota noprint" id="relInfo"></p>
   </section>
@@ -146,10 +175,16 @@ main{padding-bottom:96px}
   <!-- AJUSTES -->
   <section id="vC" class="hide">
     <div class="card">
-      <h3>Importar um placar já escrito</h3>
-      <p class="nota">Cole aqui o último placar do grupo. O app separa os setores (#PAM:#, #CTI:#…) e os pacientes numerados, e cada texto vira o histórico do paciente.</p>
-      <textarea id="txtImp" placeholder="Placar 23/11&#10;#PAM:#&#10;1 - ..."></textarea>
-      <div class="acts"><button class="pri" id="btnImp">Importar placar</button></div>
+      <h3>Inteligência artificial (Claude Opus 5.5)</h3>
+      <p class="nota">Cole a chave da API da Anthropic (começa com “sk-ant-”). Ela fica guardada só neste celular, fora da cópia de segurança.</p>
+      <input type="password" id="chave" placeholder="sk-ant-..." autocomplete="off">
+      <div class="acts">
+        <button id="chaveSalvar" class="pri">Salvar chave</button>
+        <button id="chaveTestar">Testar</button>
+        <button id="chaveApagar" class="del">Apagar chave</button>
+      </div>
+      <p class="nota" id="chaveInfo"></p>
+      <p class="nota" id="gastoInfo"></p>
     </div>
     <div class="card">
       <h3>Setores (na ordem do placar)</h3>
@@ -168,8 +203,8 @@ main{padding-bottom:96px}
     </div>
     <div class="card">
       <h3>Privacidade</h3>
-      <p class="nota">Os pacientes ficam guardados só neste celular. Ao gravar, a fala passa pelo serviço de voz do Google para virar texto, como no ditado do teclado. O placar só sai do celular quando você copia ou envia.</p>
-      <p class="nota">Versão 3 · 23/11/2026</p>
+      <p class="nota">Os pacientes ficam guardados só neste celular. Ao gravar, a fala passa pelo serviço de voz do Google para virar texto, como no ditado do teclado. Ao usar “✨ IA”, as notas e as fichas são enviadas à Anthropic (Claude) para organizar o texto. O placar só sai do celular quando você copia ou envia.</p>
+      <p class="nota">Versão 4 · 23/11/2026</p>
     </div>
   </section>
 </main>
@@ -188,6 +223,8 @@ main{padding-bottom:96px}
     </div>
   </div>
 </div>
+
+<div id="busy" class="busy hide"><div><div class="giro"></div><div id="busyTxt">Aguarde…</div></div></div>
 
 <div class="toast" id="toast"></div>
 
@@ -208,7 +245,7 @@ const ddmm = s => { const d = parse(s); return String(d.getDate()).padStart(2, '
 const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 // ---------- estado ----------
-function novoEstado() { return { medica: '', data: hojeISO(), avisos: '', setores: SETORES_PADRAO.slice(), pacientes: [], notas: [] }; }
+function novoEstado() { return { medica: '', data: hojeISO(), avisos: '', setores: SETORES_PADRAO.slice(), pacientes: [], notas: [], resumoIA: null, gastoIA: 0 }; }
 function novoPac(setor) { return { id: uid(), setor, ident: '', dx: '', historia: '', atual: '', hoje: '', pendencias: [], alta: false, altaObs: '' }; }
 function carregar() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.pacientes)) return Object.assign(novoEstado(), s); } catch (e) {}
@@ -251,7 +288,6 @@ function gerar(modo) {
       const atual = p.atual.trim(), hoje = p.hoje.trim();
       if (!res) {
         if (p.historia.trim()) L.push(p.historia.trim());
-        if (atual) L.push('ATUAL: ' + atual);
         if (hoje) L.push(datado(hoje));
       } else {
         if (atual) L.push('Atual: ' + atual);
@@ -433,10 +469,18 @@ $('novoPl').onclick = () => {
 
 // ---------- placar ----------
 let modo = 'completo';
+const hashTxt = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+const resumoValido = () => S.resumoIA && S.resumoIA.h === hashTxt(gerar('completo'));
+function textoPlacar() { return modo === 'resumo' && resumoValido() ? S.resumoIA.t : gerar(modo); }
 function mostrarRel() {
-  const t = gerar(modo); $('rel').value = t;
+  const t = textoPlacar(); $('rel').value = t;
   $('relInfo').textContent = t.length.toLocaleString('pt-BR') + ' caracteres';
   $('mC').classList.toggle('on', modo === 'completo'); $('mR').classList.toggle('on', modo === 'resumo');
+  $('resIABox').classList.toggle('hide', modo !== 'resumo');
+  if (modo === 'resumo') {
+    $('btnResIA').textContent = resumoValido() ? '✨ Refazer resumido com IA' : '✨ Gerar resumido com IA';
+    $('resIAInfo').textContent = resumoValido() ? 'Resumido feito pela IA' : (S.resumoIA ? 'O placar mudou desde o último resumo da IA' : 'Sem IA: resumo simples');
+  }
 }
 $('mC').onclick = () => { modo = 'completo'; mostrarRel(); };
 $('mR').onclick = () => { modo = 'resumo'; mostrarRel(); };
@@ -452,33 +496,261 @@ function aba(x) {
 $('tN').onclick = () => aba('N'); $('tP').onclick = () => aba('P'); $('tR').onclick = () => aba('R'); $('tC').onclick = () => aba('C');
 
 $('copiar').onclick = async () => {
-  const t = gerar(modo);
+  const t = textoPlacar();
   try { await navigator.clipboard.writeText(t); } catch (e) { $('rel').select(); document.execCommand('copy'); }
   toast('Placar copiado');
 };
 $('compart').onclick = async () => {
-  const t = gerar(modo);
+  const t = textoPlacar();
   if (navigator.share) { try { await navigator.share({ text: t }); } catch (e) {} }
   else { try { await navigator.clipboard.writeText(t); } catch (e) {} toast('Copiado — cole no WhatsApp'); }
 };
 $('imprimir').onclick = () => { mostrarRel(); window.print(); };
 
-// ---------- importar ----------
-$('btnImp').onclick = () => {
-  const txt = $('txtImp').value; if (!txt.trim()) { toast('Cole o placar primeiro'); return; }
+// ---------- receber placar do grupo (vira a base) ----------
+function abrirRecebido(txt) {
+  $('recBox').classList.remove('hide'); $('btnRec').classList.add('hide');
+  if (txt) $('recTxt').value = txt;
+}
+function fecharRecebido() { $('recBox').classList.add('hide'); $('btnRec').classList.remove('hide'); $('recTxt').value = ''; }
+$('btnRec').onclick = () => abrirRecebido();
+$('recCancel').onclick = fecharRecebido;
+$('recColar').onclick = async () => {
+  try { const t = await navigator.clipboard.readText(); if (t.trim()) { $('recTxt').value = t; toast('Placar colado'); } else toast('A área de transferência está vazia'); }
+  catch (e) { toast('Não consegui colar sozinho: segure na caixa e escolha Colar'); $('recTxt').focus(); }
+};
+function planejarRecebido(txt) {
   const r = lerPlacar(txt);
-  if (!r.pacientes.length) { alert('Não encontrei pacientes. Confira se os setores estão como #PAM:# e os pacientes numerados (1 - Nome...).'); return; }
-  const altas = r.pacientes.filter(p => p.alta).length;
-  const porSetor = r.setores.map(s => s + ': ' + r.pacientes.filter(p => p.setor === s).length).join('\n');
-  if (S.pacientes.length && !confirm('Isso substitui os ' + S.pacientes.length + ' pacientes atuais. Continuar?')) return;
-  if (!confirm('Encontrei ' + r.pacientes.length + ' pacientes:\n' + porSetor + '\n\nImportar?')) return;
-  let ps = r.pacientes;
-  if (altas && confirm(altas + ' paciente(s) estão com ALTA HOJE nesse placar. Tirar da lista já?')) ps = ps.filter(p => !p.alta);
-  S.pacientes = ps;
-  S.setores = [...new Set([...r.setores, ...S.setores])];
-  if (r.soltas.length) S.avisos = r.soltas.join('\n');
-  $('txtImp').value = '';
-  salvar(); aba('P'); toast(ps.length + ' pacientes importados');
+  const usados = new Set(), passos = [];
+  for (const rp of r.pacientes) {
+    const kr = chaves(rp).pal;
+    const cands = S.pacientes.filter(p => !usados.has(p.id) && chaves(p).pal.some(w => kr.includes(w)));
+    const p = cands.find(c => c.setor === rp.setor) || cands[0] || null;
+    if (p) usados.add(p.id);
+    passos.push({ rp, p });
+  }
+  const fora = S.pacientes.filter(p => !usados.has(p.id));
+  return { r, passos, fora };
+}
+function receberPlacar(txt) {
+  const { r, passos, fora } = planejarRecebido(txt);
+  if (!r.pacientes.length) { alert('Não encontrei pacientes nesse texto. O placar precisa ter os setores (#PAM:#, #CTI:#…) e os pacientes numerados (1 - Nome…).'); return false; }
+  const atualiz = passos.filter(x => x.p && !x.rp.alta), novos = passos.filter(x => !x.p && !x.rp.alta), altas = passos.filter(x => x.rp.alta);
+  const comHoje = S.pacientes.filter(p => p.hoje.trim()).length;
+  let msg = 'Placar recebido com ' + r.pacientes.length + ' pacientes.\n\n• Atualizar histórico: ' + atualiz.length + '\n• Pacientes novos: ' + novos.length +
+    (novos.length ? ' (' + novos.map(x => x.rp.ident.split(/[–\-,]/)[0].trim()).join(', ') + ')' : '') +
+    '\n• Alta no placar recebido (saem): ' + altas.length;
+  if (comHoje) msg += '\n• O “Hoje” de ' + comHoje + ' paciente(s) será limpo (já deve estar no placar recebido)';
+  if (!confirm(msg + '\n\nUsar como base?')) return false;
+  let tirarFora = false;
+  if (fora.length) tirarFora = confirm('Estes estão na sua lista mas não aparecem no placar recebido (provável alta ou transferência):\n\n' + fora.map(p => '• ' + p.ident).join('\n') + '\n\nTirar da lista? (Cancelar mantém)');
+  const lista = [];
+  for (const { rp, p } of passos) {
+    if (rp.alta) continue;
+    if (p) {
+      Object.assign(p, { setor: rp.setor, ident: rp.ident, historia: rp.historia, hoje: '', alta: false, altaObs: '' });
+      p.pendencias = p.pendencias.filter(x => !x.feito && x.t.trim());
+      lista.push(p);
+    } else lista.push(rp);
+  }
+  if (!tirarFora) fora.forEach(p => { p.hoje = ''; lista.push(p); });
+  S.pacientes = lista;
+  S.setores = [...S.setores, ...r.setores.filter(s => !S.setores.includes(s))];
+  S.notas = S.notas.filter(n => !n.pid);
+  S.data = hojeISO(); S.avisos = ''; S.resumoIA = null;
+  salvar(); render(); toast('Placar recebido virou a base');
+  return true;
+}
+$('recOk').onclick = () => { const t = $('recTxt').value; if (!t.trim()) { toast('Cole o placar primeiro'); return; } if (receberPlacar(t)) fecharRecebido(); };
+
+// ---------- IA (Claude Opus 5.5) ----------
+const CHAVE_KEY = 'placar-chave';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.7.0/+esm';
+const MODELO = 'claude-opus-5-5';
+const lerChave = () => { try { return localStorage.getItem(CHAVE_KEY) || ''; } catch (e) { return ''; } };
+let SDK = null, cli = null, cliChave = '';
+async function cliente() {
+  const k = lerChave();
+  if (!k) throw new Error('Configure a chave da IA em Ajustes.');
+  if (!SDK) { try { SDK = await import(SDK_URL); } catch (e) { throw new Error('Sem internet para ligar a IA agora.'); } }
+  const Anthropic = SDK.default || SDK.Anthropic;
+  if (!cli || cliChave !== k) { cli = new Anthropic({ apiKey: k, dangerouslyAllowBrowser: true }); cliChave = k; }
+  return { c: cli, Anthropic };
+}
+function registrarGasto(u) {
+  if (!u) return;
+  const usd = ((u.input_tokens || 0) * 4 + (u.cache_creation_input_tokens || 0) * 5 + (u.cache_read_input_tokens || 0) * 0.2 + (u.output_tokens || 0) * 20) / 1e6;
+  S.gastoIA = (S.gastoIA || 0) + usd; salvar(); mostrarGasto();
+}
+function mostrarGasto() {
+  $('gastoInfo').textContent = 'Gasto estimado com IA neste celular: US$ ' + (S.gastoIA || 0).toFixed(2) + ' (≈ R$ ' + ((S.gastoIA || 0) * 5.5).toFixed(2) + ')';
+  $('chaveInfo').textContent = lerChave() ? 'Chave salva: ' + lerChave().slice(0, 10) + '…' : 'Nenhuma chave salva.';
+}
+async function chamarIA({ system, user, schema, maxTokens = 32000 }) {
+  const { c, Anthropic } = await cliente();
+  const base = { model: MODELO, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }], output_config: { effort: 'medium' } };
+  if (schema) base.output_config.format = { type: 'json_schema', schema };
+  let msg;
+  try {
+    try {
+      // Fallback no servidor: se o Opus 5.5 recusar, a própria API tenta outro modelo.
+      msg = await c.beta.messages.stream({ ...base, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }).finalMessage();
+    } catch (e) {
+      if (e instanceof Anthropic.BadRequestError && /fallback/i.test(e.message || '')) msg = await c.messages.stream(base).finalMessage();
+      else throw e;
+    }
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) throw new Error('A chave da IA não foi aceita. Confira em Ajustes.');
+    if (e instanceof Anthropic.PermissionDeniedError) throw new Error('A chave não tem permissão para usar o Claude Opus 5.5.');
+    if (e instanceof Anthropic.RateLimitError) throw new Error('Muitos pedidos seguidos. Espere um minuto e tente de novo.');
+    if (e instanceof Anthropic.BadRequestError) throw new Error(/credit|balance|saldo/i.test(e.message || '') ? 'Acabaram os créditos da API. Recarregue na conta da Anthropic.' : 'A IA não aceitou o pedido: ' + e.message);
+    if (e instanceof Anthropic.APIConnectionError) throw new Error('Sem internet para falar com a IA agora.');
+    if (e instanceof Anthropic.APIError) throw new Error('Erro da IA (' + e.status + '). Tente de novo em instantes.');
+    throw e;
+  }
+  registrarGasto(msg.usage);
+  if (msg.stop_reason === 'refusal') throw new Error('A IA recusou este pedido.');
+  if (msg.stop_reason === 'max_tokens') throw new Error('A resposta da IA ficou grande demais. Organize as notas em partes.');
+  let blocos = msg.content;
+  const fi = blocos.map(b => b.type).lastIndexOf('fallback');
+  if (fi >= 0) blocos = blocos.slice(fi + 1);
+  const txt = blocos.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  if (!schema) return txt;
+  try { return JSON.parse(txt); } catch (e) { throw new Error('A IA respondeu num formato inesperado. Tente de novo.'); }
+}
+function ocupado(txt) { $('busyTxt').textContent = txt; $('busy').classList.remove('hide'); }
+function livre() { $('busy').classList.add('hide'); }
+
+const ESTILO = `Estilo do placar: frases curtas e telegráficas, em português, em primeira pessoa quando a conduta é dela ("Subi LVT pra 70", "Pedi NS de feno", "Orientei encaminhar SisReg"). Siglas usuais: LVT, FNB/Feno, VPA, VGB, CBZ, NS (nível sérico), EEG, ENMG, RNM, TC, LCR, IOT, ATB, IGEV, CTI, UCIN, PAM, mg/kg/dia, 8/8h, 12/12h, DNPM, ROT. Sem floreios, sem cumprimentos.`;
+
+const SYS_ORG = `Você ajuda uma neuropediatra de um hospital universitário a montar o "placar", a passagem de plantão que ela envia no grupo de WhatsApp dos médicos. Ao longo do dia ela grava notas de voz; o texto vem de transcrição automática e pode ter erros, sobretudo em nomes de remédios, números e nomes próprios.
+
+Sua tarefa: ler as NOTAS NOVAS e devolver as atualizações das fichas dos pacientes.
+
+Regras:
+- Uma nota pode falar de um ou mais pacientes. Identifique cada um pelo nome, leito, setor ou contexto clínico, comparando com as fichas existentes (use o histórico recente). Use o paciente_id existente quando for o mesmo paciente, mesmo que o nome tenha saído um pouco diferente na transcrição.
+- Só crie paciente novo (paciente_id = "") quando ficar claro que ainda não há ficha. Nesse caso preencha novo_setor (um dos setores da lista, salvo se ela disser outro) e novo_ident no formato "Nome – idade – leito", só com o que foi dito.
+- Para paciente existente, deixe novo_setor e novo_ident vazios, exceto novo_setor quando ela disser que o paciente mudou de setor.
+- "hoje" é o texto COMPLETO do dia para aquele paciente: junte o "hoje" que já existe na ficha com o conteúdo das novas notas, sem repetir e sem perder nada. Não ponha data no começo; o app põe.
+- Nunca invente dado, dose, exame, resultado ou conduta. Mantenha doses e números exatamente como ditos. Se um remédio ou número parecer erro de transcrição, escreva o mais provável seguido de "(conferir)".
+- dx: diagnóstico em poucas palavras só se for novo ou a ficha estiver sem; senão "".
+- atual: medicações/plano em curso, atualizado, só se mudou; senão "".
+- pendencias_novas: tarefas para o próximo plantão que ela citar (pedir, checar, aguardar, programar, discutir). Lista vazia se não houver.
+- alta: true só se ela disser que o paciente teve alta hoje; alta_obs com o que ela disser junto (retorno etc.), senão "".
+- notas: ids das notas usadas para esse paciente.
+- Nota que você não conseguir atribuir com segurança vai em nao_classificadas, com o motivo em uma frase. Não chute.
+- Devolva apenas os pacientes que mudaram.
+
+${ESTILO}`;
+
+const SCHEMA_ORG = {
+  type: 'object', additionalProperties: false, required: ['atualizacoes', 'nao_classificadas'],
+  properties: {
+    atualizacoes: { type: 'array', items: { type: 'object', additionalProperties: false,
+      required: ['paciente_id', 'novo_setor', 'novo_ident', 'hoje', 'dx', 'atual', 'pendencias_novas', 'alta', 'alta_obs', 'notas'],
+      properties: {
+        paciente_id: { type: 'string' }, novo_setor: { type: 'string' }, novo_ident: { type: 'string' },
+        hoje: { type: 'string' }, dx: { type: 'string' }, atual: { type: 'string' },
+        pendencias_novas: { type: 'array', items: { type: 'string' } },
+        alta: { type: 'boolean' }, alta_obs: { type: 'string' },
+        notas: { type: 'array', items: { type: 'string' } } } } },
+    nao_classificadas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['nota_id', 'motivo'],
+      properties: { nota_id: { type: 'string' }, motivo: { type: 'string' } } } }
+  }
+};
+
+function pedidoOrganizar(notas) {
+  const fichas = S.pacientes.filter(p => !p.alta).map(p => ({
+    paciente_id: p.id, setor: p.setor, ident: p.ident, dx: p.dx, atual: p.atual, hoje: p.hoje,
+    pendencias_abertas: p.pendencias.filter(x => !x.feito && x.t.trim()).map(x => x.t),
+    historico_recente: p.historia.split('\n').filter(l => l.trim()).slice(-25).join('\n')
+  }));
+  return 'Data do placar: ' + ddmm(S.data) + '\nSetores: ' + S.setores.join(', ') +
+    '\n\nFICHAS ATUAIS (JSON):\n' + JSON.stringify(fichas) +
+    '\n\nNOTAS NOVAS (JSON):\n' + JSON.stringify(notas.map(n => ({ nota_id: n.id, hora: n.h, texto: n.t })));
+}
+let backupIA = null;
+function aplicarOrganizacao(r) {
+  const res = { atualizados: [], novos: [], duvidas: [] };
+  for (const a of r.atualizacoes || []) {
+    let p = a.paciente_id && S.pacientes.find(x => x.id === a.paciente_id);
+    if (!p) {
+      if (!a.novo_ident.trim()) continue;
+      p = novoPac(normSetor(a.novo_setor.trim() || S.setores[0], S.setores));
+      p.ident = a.novo_ident.trim(); S.pacientes.push(p);
+      res.novos.push(p.ident + ' (' + p.setor + ')');
+    } else {
+      if (a.novo_setor.trim()) p.setor = normSetor(a.novo_setor.trim(), S.setores);
+      res.atualizados.push(p.ident);
+    }
+    if (a.hoje.trim()) p.hoje = a.hoje.trim();
+    if (a.dx.trim()) p.dx = a.dx.trim();
+    if (a.atual.trim()) p.atual = a.atual.trim();
+    (a.pendencias_novas || []).filter(t => t.trim()).forEach(t => p.pendencias.push({ t: t.trim(), feito: false }));
+    if (a.alta) { p.alta = true; if (a.alta_obs.trim()) p.altaObs = a.alta_obs.trim(); }
+    (a.notas || []).forEach(id => { const n = S.notas.find(x => x.id === id); if (n) { n.pid = p.id; n.ins = ''; } });
+  }
+  (r.nao_classificadas || []).forEach(x => { const n = S.notas.find(y => y.id === x.nota_id); if (n && !n.pid) res.duvidas.push(n.h + ' – ' + x.motivo); });
+  garantirSetores();
+  return res;
+}
+$('btnIA').onclick = async () => {
+  const notas = S.notas.filter(n => !n.pid && n.t.trim());
+  if (!notas.length) { toast('Nenhuma nota nova para organizar'); return; }
+  if (!lerChave()) { alert('Para usar a IA, cole a chave da API em Ajustes → Inteligência artificial.'); aba('C'); return; }
+  ocupado('✨ A IA está organizando ' + notas.length + ' nota(s)…<br>Pode levar até um minuto.'.replace('<br>', '\n'));
+  try {
+    const r = await chamarIA({ system: SYS_ORG, user: pedidoOrganizar(notas), schema: SCHEMA_ORG });
+    backupIA = JSON.stringify(S);
+    const res = aplicarOrganizacao(r);
+    S.resumoIA = null; salvar(); render(); renderNotas();
+    const li = a => a.map(x => '<li>' + esc(x) + '</li>').join('');
+    $('iaRes').innerHTML = '<h3>✨ Organizado</h3>' +
+      (res.atualizados.length ? '<div class="nota">Atualizados:</div><ul>' + li(res.atualizados) + '</ul>' : '') +
+      (res.novos.length ? '<div class="nota">Pacientes novos:</div><ul>' + li(res.novos) + '</ul>' : '') +
+      (res.duvidas.length ? '<div class="nota">A IA não teve certeza (escolha o paciente na nota):</div><ul>' + li(res.duvidas) + '</ul>' : '') +
+      '<div class="nota" style="margin-top:6px">Confira o “Hoje” em Pacientes antes de enviar.</div>';
+    $('iaRes').classList.remove('hide'); $('btnDesf').classList.remove('hide');
+  } catch (e) { alert(e.message || String(e)); }
+  finally { livre(); }
+};
+$('btnDesf').onclick = () => {
+  if (!backupIA || !confirm('Desfazer a última organização feita pela IA?')) return;
+  const gasto = S.gastoIA; S = Object.assign(novoEstado(), JSON.parse(backupIA)); S.gastoIA = gasto; backupIA = null;
+  salvar(); render(); renderNotas(); $('iaRes').classList.add('hide'); $('btnDesf').classList.add('hide'); toast('Organização desfeita');
+};
+
+const SYS_RES = `Você gera a versão RESUMIDA do placar de passagem de plantão de uma equipe de neuropediatria, para o grupo de WhatsApp dos médicos.
+Regras:
+- Mantenha a estrutura do placar recebido: primeira linha "Placar DD/MM – resumo"; os setores no mesmo formato e ordem (#Setor:#); os pacientes com o mesmo número e a mesma identificação.
+- Para cada paciente, no máximo 3 linhas curtas: diagnóstico principal; situação atual e medicações-chave com doses; o que mudou hoje e pendências.
+- Mantenha "ALTA HOJE" (e o retorno) quando houver. Setor sem pacientes: "Sem pedidos".
+- Não invente nada e não omita alta, intercorrência grave ou pendência. Não acrescente comentários fora do placar.
+- Responda só com o texto do placar resumido.
+${ESTILO}`;
+$('btnResIA').onclick = async () => {
+  if (!lerChave()) { alert('Para usar a IA, cole a chave da API em Ajustes → Inteligência artificial.'); aba('C'); return; }
+  const completo = gerar('completo');
+  ocupado('✨ A IA está resumindo o placar…');
+  try {
+    const t = await chamarIA({ system: SYS_RES, user: completo, maxTokens: 16000 });
+    S.resumoIA = { h: hashTxt(completo), t }; salvar(); mostrarRel(); toast('Resumido pronto');
+  } catch (e) { alert(e.message || String(e)); }
+  finally { livre(); }
+};
+
+$('chaveSalvar').onclick = () => {
+  const k = $('chave').value.trim();
+  if (!/^sk-ant-/.test(k)) { alert('A chave da Anthropic começa com “sk-ant-”.'); return; }
+  try { localStorage.setItem(CHAVE_KEY, k); } catch (e) {}
+  $('chave').value = ''; cli = null; mostrarGasto(); toast('Chave salva neste celular');
+};
+$('chaveApagar').onclick = () => { if (confirm('Apagar a chave da IA deste celular?')) { try { localStorage.removeItem(CHAVE_KEY); } catch (e) {} cli = null; mostrarGasto(); } };
+$('chaveTestar').onclick = async () => {
+  ocupado('Testando a chave…');
+  try { const t = await chamarIA({ system: 'Responda só com a palavra OK.', user: 'Teste de conexão.', maxTokens: 2000 }); alert('Chave funcionando ✔ (' + t.slice(0, 20) + ')'); }
+  catch (e) { alert(e.message || String(e)); }
+  finally { livre(); }
 };
 
 // ---------- cópia de segurança ----------
@@ -640,6 +912,13 @@ $('distrib').onclick = () => {
 
 render();
 renderNotas();
+mostrarGasto();
+// Placar compartilhado direto do WhatsApp para o app instalado (Compartilhar → Placar)
+(() => {
+  const q = new URLSearchParams(location.search);
+  const t = q.get('text') || q.get('title') || '';
+  if (t.trim()) { aba('P'); abrirRecebido(t); history.replaceState(null, '', location.pathname); }
+})();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 </script>
 </body>
