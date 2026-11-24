@@ -1,5 +1,5 @@
 // Guarda o app no celular para abrir sem internet. Não guarda dados de pacientes (esses ficam no localStorage).
-const CACHE = 'placar-v1';
+const CACHE = 'placar-v2';
 const ARQS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

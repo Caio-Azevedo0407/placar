@@ -57,6 +57,16 @@ details.h>summary{cursor:pointer;color:var(--mut);font-size:13px}
 .nota{color:var(--mut);font-size:13px}
 h3{font-size:15px;margin:0 0 4px}
 .hide{display:none!important}
+.falar{text-align:center}
+.falar label,.falar textarea{text-align:left}
+.mic{display:block;margin:6px auto 10px;width:104px;height:104px;border-radius:50%;font-size:44px;background:var(--pri);color:#fff;border:0;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.mic.rec{background:var(--bad);animation:pulso 1.2s infinite}
+@keyframes pulso{50%{transform:scale(1.07)}}
+.aovivo{min-height:50px;padding:10px;border:1px dashed var(--bd);border-radius:8px;margin:6px 0;text-align:left}
+.nt{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;margin-bottom:8px}
+.nt.ok{border-left:5px solid var(--ok)}
+.nt .top{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mut);margin-bottom:6px}
+.nt select{margin-top:6px}
 @media print{header,.noprint{display:none!important}main{padding:0}#rel{border:0;min-height:0}}
 </style>
 </head>
@@ -65,15 +75,31 @@ h3{font-size:15px;margin:0 0 4px}
   <h1>Placar · Neuropediatria</h1>
   <div class="sub" id="cab"></div>
   <nav>
-    <button id="tP" class="on">Pacientes</button>
+    <button id="tN" class="on">🎤 Falar</button>
+    <button id="tP">Pacientes</button>
     <button id="tR">Placar</button>
     <button id="tC">Ajustes</button>
   </nav>
 </header>
 
 <main>
+  <!-- FALAR -->
+  <section id="vN">
+    <div class="card falar">
+      <button id="mic" class="mic" aria-label="Gravar">🎤</button>
+      <div id="micInfo" class="nota">Toque e fale. Comece pelo nome do paciente:<br>“Maria: febre de novo, ajustei a medicação…”. Toque de novo para terminar.</div>
+      <div id="aoVivo" class="aovivo hide"></div>
+      <label>Ou escreva / dite pelo 🎤 do teclado</label>
+      <textarea id="notaTxt" placeholder="Nome do paciente: o que aconteceu…"></textarea>
+      <div class="acts"><button id="notaAdd">Salvar nota</button></div>
+    </div>
+    <div class="setor"><h2>Notas de hoje <span class="n" id="notaCont"></span></h2><button class="mini pri" id="distrib">Distribuir nas fichas</button></div>
+    <div id="notas"></div>
+    <p class="nota">“Distribuir” coloca cada nota no campo “Hoje” do paciente cujo nome aparece no começo da fala (ou pelo “leito 12”). As que não forem reconhecidas ficam aqui para você escolher o paciente.</p>
+  </section>
+
   <!-- PACIENTES -->
-  <section id="vP">
+  <section id="vP" class="hide">
     <div class="card">
       <div class="row">
         <div><label>Data do placar</label><input type="date" id="data"></div>
@@ -154,10 +180,10 @@ const ddmm = s => { const d = parse(s); return String(d.getDate()).padStart(2, '
 const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 // ---------- estado ----------
-function novoEstado() { return { medica: '', data: hojeISO(), avisos: '', setores: SETORES_PADRAO.slice(), pacientes: [] }; }
+function novoEstado() { return { medica: '', data: hojeISO(), avisos: '', setores: SETORES_PADRAO.slice(), pacientes: [], notas: [] }; }
 function novoPac(setor) { return { id: uid(), setor, ident: '', dx: '', historia: '', atual: '', hoje: '', pendencias: [], alta: false, altaObs: '' }; }
 function carregar() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.pacientes)) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.pacientes)) return Object.assign(novoEstado(), s); } catch (e) {}
   return novoEstado();
 }
 let S = carregar();
@@ -368,6 +394,7 @@ function novoPlantao() {
     p.pendencias = p.pendencias.filter(x => !x.feito && x.t.trim());
   });
   S.data = hojeISO(); S.avisos = '';
+  S.notas = S.notas.filter(n => !n.pid);
 }
 $('novoPl').onclick = () => {
   const altas = S.pacientes.filter(p => p.alta).length, comHoje = S.pacientes.filter(p => p.hoje.trim()).length;
@@ -386,12 +413,13 @@ $('mC').onclick = () => { modo = 'completo'; mostrarRel(); };
 $('mR').onclick = () => { modo = 'resumo'; mostrarRel(); };
 
 function aba(x) {
-  ['P', 'R', 'C'].forEach(k => { $('v' + k).classList.toggle('hide', k !== x); $('t' + k).classList.toggle('on', k === x); });
+  ['N', 'P', 'R', 'C'].forEach(k => { $('v' + k).classList.toggle('hide', k !== x); $('t' + k).classList.toggle('on', k === x); });
+  if (x === 'N') renderNotas();
   if (x === 'R') mostrarRel();
   if (x === 'P') render();
   window.scrollTo(0, 0);
 }
-$('tP').onclick = () => aba('P'); $('tR').onclick = () => aba('R'); $('tC').onclick = () => aba('C');
+$('tN').onclick = () => aba('N'); $('tP').onclick = () => aba('P'); $('tR').onclick = () => aba('R'); $('tC').onclick = () => aba('C');
 
 $('copiar').onclick = async () => {
   const t = gerar(modo);
@@ -439,7 +467,121 @@ $('impF').onchange = e => {
 };
 $('zerar').onclick = () => { if (confirm('Apagar todos os pacientes deste celular?')) { S = novoEstado(); salvar(); render(); } };
 
+// ---------- falar: notas por voz ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, gravando = false, falaFinal = '', falaParcial = '';
+const hora = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+
+function uiMic() {
+  $('mic').classList.toggle('rec', gravando);
+  $('mic').textContent = gravando ? '■' : '🎤';
+  $('aoVivo').classList.toggle('hide', !gravando);
+  if (gravando) $('aoVivo').textContent = 'Ouvindo…';
+}
+function ligarRec() {
+  // Uma frase por sessão e religa sozinho: no Android o modo contínuo repete texto.
+  rec = new SR(); rec.lang = 'pt-BR'; rec.continuous = false; rec.interimResults = true;
+  rec.onresult = e => {
+    falaParcial = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript.trim();
+      if (e.results[i].isFinal) falaFinal += (falaFinal ? ' ' : '') + t; else falaParcial += t;
+    }
+    $('aoVivo').textContent = (falaFinal + ' ' + falaParcial).trim() || 'Ouvindo…';
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { gravando = false; alert('Permita o uso do microfone para este site (cadeado ao lado do endereço).'); }
+    else if (e.error === 'network') { gravando = false; toast('Sem internet para transcrever: use o 🎤 do teclado na caixa'); }
+  };
+  rec.onend = () => {
+    if (gravando) { try { ligarRec(); } catch (err) { gravando = false; uiMic(); guardarFala(); } }
+    else { uiMic(); guardarFala(); }
+  };
+  rec.start();
+}
+function guardarFala() {
+  const t = (falaFinal + ' ' + falaParcial).trim(); falaFinal = ''; falaParcial = '';
+  if (t) addNota(t);
+}
+function addNota(t) {
+  S.notas.push({ id: uid(), h: hora(), t: cap(t.trim()), pid: '', ins: '' });
+  salvar(); renderNotas(); toast('Nota salva');
+}
+$('mic').onclick = () => {
+  if (!SR) { toast('Este navegador não transcreve: use o 🎤 do teclado'); $('notaTxt').focus(); return; }
+  if (gravando) { gravando = false; uiMic(); try { rec.stop(); } catch (e) {} return; }
+  falaFinal = ''; falaParcial = ''; gravando = true; uiMic();
+  try { ligarRec(); } catch (e) { gravando = false; uiMic(); toast('Não consegui ligar o microfone'); }
+};
+$('notaAdd').onclick = () => { const t = $('notaTxt').value.trim(); if (!t) return; addNota(t); $('notaTxt').value = ''; };
+
+const STOP = new Set(['rn', 'de', 'da', 'do', 'dos', 'das', 'sd', 'paciente', 'leito', 'ano', 'anos', 'mes', 'meses', 'dia', 'dias', 'retorno', 'feminino', 'masculino']);
+function chaves(p) {
+  const id = sem(p.ident);
+  const base = id.split(/[–—\-,(.]/)[0].replace(/[^\p{L}\s]/gu, ' ');
+  const pal = base.split(/\s+/).filter(w => w.length >= 3 && !STOP.has(w)).slice(0, 2);
+  const nums = id.match(/\b\d{2,4}\b/g) || [];
+  return { pal, nums };
+}
+function acharPaciente(t) {
+  const txt = sem(t);
+  const inicio = txt.replace(/[^\p{L}\d\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 8);
+  const porNome = S.pacientes.filter(p => !p.alta && chaves(p).pal.some(w => inicio.includes(w)));
+  if (porNome.length === 1) return porNome[0];
+  if (porNome.length > 1) return null;
+  const m = txt.match(/leito\s*(\d{1,4})/);
+  if (m) { const c = S.pacientes.filter(p => chaves(p).nums.includes(m[1])); if (c.length === 1) return c[0]; }
+  return null;
+}
+function atribuir(n, p) {
+  const t = cap(n.t.trim());
+  p.hoje = (p.hoje.trim() ? p.hoje.trim() + '\n' : '') + t;
+  n.pid = p.id; n.ins = t;
+}
+function desatribuir(n) {
+  const p = S.pacientes.find(x => x.id === n.pid);
+  if (p && n.ins) p.hoje = p.hoje.replace(n.ins, '').replace(/\n{2,}/g, '\n').trim();
+  n.pid = ''; n.ins = '';
+}
+function renderNotas() {
+  const opts = S.pacientes.filter(p => !p.alta).map(p => `<option value="${p.id}">${esc(p.setor)} · ${esc(p.ident || 'sem nome')}</option>`).join('');
+  const pend = S.notas.filter(n => !n.pid).length;
+  $('notaCont').textContent = '(' + S.notas.length + (pend ? ', ' + pend + ' sem paciente' : '') + ')';
+  $('notas').innerHTML = S.notas.length ? S.notas.slice().reverse().map(n => {
+    const p = S.pacientes.find(x => x.id === n.pid);
+    return `<div class="nt ${p ? 'ok' : ''}" data-nid="${n.id}">
+      <div class="top"><span>${n.h}</span><span style="flex:1">${p ? '→ ' + esc(p.ident) + ' ✓' : ''}</span>
+      ${p ? '<button class="mini" data-undo="1">Desfazer</button>' : ''}<button class="mini del" data-nrm="1">✕</button></div>
+      ${p ? `<div>${esc(n.t)}</div>` : `<textarea data-nt="1">${esc(n.t)}</textarea>
+      <select data-nsel="1"><option value="">Colocar em qual paciente?</option>${opts}</select>`}
+    </div>`;
+  }).join('') : '<div class="empty">Nenhuma nota ainda.</div>';
+}
+const notaDe = el => { const d = el.closest('.nt'); return d ? S.notas.find(n => n.id === d.dataset.nid) : null; };
+$('notas').addEventListener('input', e => { const n = notaDe(e.target); if (n && e.target.dataset.nt) { n.t = e.target.value; salvar(); } });
+$('notas').addEventListener('change', e => {
+  const n = notaDe(e.target); if (!n || !e.target.dataset.nsel || !e.target.value) return;
+  const p = S.pacientes.find(x => x.id === e.target.value); if (!p) return;
+  atribuir(n, p); salvar(); renderNotas(); toast('Nota colocada em ' + (p.ident || 'paciente'));
+});
+$('notas').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const n = notaDe(b); if (!n) return;
+  if (b.dataset.undo) { desatribuir(n); salvar(); renderNotas(); }
+  else if (b.dataset.nrm && confirm(n.pid ? 'Apagar a nota e tirar o texto da ficha do paciente?' : 'Apagar esta nota?')) {
+    if (n.pid) desatribuir(n); S.notas = S.notas.filter(x => x !== n); salvar(); renderNotas();
+  }
+});
+$('distrib').onclick = () => {
+  let ok = 0;
+  S.notas.filter(n => !n.pid).forEach(n => { const p = acharPaciente(n.t); if (p) { atribuir(n, p); ok++; } });
+  const resto = S.notas.filter(n => !n.pid).length;
+  salvar(); renderNotas();
+  toast(ok + ' nota(s) distribuída(s)' + (resto ? ' · ' + resto + ' para escolher' : ''));
+};
+
 render();
+renderNotas();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 </script>
 </body>
