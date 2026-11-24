@@ -67,6 +67,17 @@ h3{font-size:15px;margin:0 0 4px}
 .nt.ok{border-left:5px solid var(--ok)}
 .nt .top{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mut);margin-bottom:6px}
 .nt select{margin-top:6px}
+.miclbl{font-weight:600;font-size:17px;margin-bottom:4px}
+.fab{position:fixed;right:16px;bottom:16px;z-index:8;border-radius:999px;padding:14px 22px;font-size:17px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.ovbox{background:var(--card);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:18px 16px 24px;text-align:center}
+#ovTit{font-size:20px;font-weight:700}
+.ovpara{color:var(--mut);font-size:14px;margin:4px 0 10px}
+#ovTxt{min-height:110px;max-height:40vh;overflow:auto;font-size:17px}
+.ovt{font-variant-numeric:tabular-nums;color:var(--mut);margin:6px 0}
+.ovbox .acts button{flex:1;padding:15px;font-size:17px}
+.lblrow{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+main{padding-bottom:96px}
 @media print{header,.noprint{display:none!important}main{padding:0}#rel{border:0;min-height:0}}
 </style>
 </head>
@@ -87,11 +98,12 @@ h3{font-size:15px;margin:0 0 4px}
   <section id="vN">
     <div class="card falar">
       <button id="mic" class="mic" aria-label="Gravar">🎤</button>
-      <div id="micInfo" class="nota">Toque e fale. Comece pelo nome do paciente:<br>“Maria: febre de novo, ajustei a medicação…”. Toque de novo para terminar.</div>
-      <div id="aoVivo" class="aovivo hide"></div>
-      <label>Ou escreva / dite pelo 🎤 do teclado</label>
-      <textarea id="notaTxt" placeholder="Nome do paciente: o que aconteceu…"></textarea>
-      <div class="acts"><button id="notaAdd">Salvar nota</button></div>
+      <div class="miclbl">Toque para gravar</div>
+      <div class="nota">Comece pelo nome do paciente:<br>“Maria: febre de novo, ajustei a medicação…”</div>
+      <details class="h" style="text-align:left"><summary>Prefere escrever?</summary>
+        <textarea id="notaTxt" placeholder="Nome do paciente: o que aconteceu…"></textarea>
+        <div class="acts"><button id="notaAdd">Salvar nota</button></div>
+      </details>
     </div>
     <div class="setor"><h2>Notas de hoje <span class="n" id="notaCont"></span></h2><button class="mini pri" id="distrib">Distribuir nas fichas</button></div>
     <div id="notas"></div>
@@ -156,10 +168,26 @@ h3{font-size:15px;margin:0 0 4px}
     </div>
     <div class="card">
       <h3>Privacidade</h3>
-      <p class="nota">Nada é enviado para a internet. O texto só sai do celular quando você copia ou envia o placar.</p>
+      <p class="nota">Os pacientes ficam guardados só neste celular. Ao gravar, a fala passa pelo serviço de voz do Google para virar texto, como no ditado do teclado. O placar só sai do celular quando você copia ou envia.</p>
+      <p class="nota">Versão 3 · 23/11/2026</p>
     </div>
   </section>
 </main>
+
+<button class="pri fab noprint hide" id="fab">🎤 Gravar</button>
+
+<div id="ov" class="ov hide" role="dialog" aria-modal="true">
+  <div class="ovbox">
+    <div id="ovTit">🔴 Gravando…</div>
+    <div class="ovpara">Vai para: <b id="ovPara"></b></div>
+    <div id="ovTxt" class="aovivo"></div>
+    <div class="ovt" id="ovTempo">0:00</div>
+    <div class="acts">
+      <button class="del" id="ovCancel">Cancelar</button>
+      <button class="pri" id="ovOk">■ Parar e salvar</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -297,8 +325,8 @@ function cardHTML(p, n, aberto) {
       <input type="text" data-f="ident" value="${esc(p.ident)}" placeholder="Ex.: Maria – 5 anos – leito 12">
       <label>Diagnóstico em poucas palavras (vai no resumido)</label>
       <input type="text" data-f="dx" value="${esc(p.dx)}" placeholder="Ex.: epilepsia focal">
-      <label>Hoje — o que aconteceu e o que foi feito</label>
-      <textarea data-f="hoje" placeholder="Toque no 🎤 do teclado para ditar">${esc(p.hoje)}</textarea>
+      <div class="lblrow"><label>Hoje — o que aconteceu e o que foi feito</label><button class="mini pri" data-ditar="1">🎤 Ditar</button></div>
+      <textarea data-f="hoje" placeholder="Toque em 🎤 Ditar e fale, ou escreva aqui">${esc(p.hoje)}</textarea>
       <label>Atual — medicações e plano em curso (opcional)</label>
       <textarea data-f="atual" placeholder="Ex.: medicações e doses em uso">${esc(p.atual)}</textarea>
       <label>Pendências para o próximo plantão</label>
@@ -363,6 +391,7 @@ $('lista').addEventListener('click', e => {
     return;
   }
   const [d, p] = pacDe(b); if (!p) return;
+  if (b.dataset.ditar) { abrirGravacao(p.id); return; }
   if (b.dataset.padd) {
     p.pendencias.push({ t: '', feito: false }); salvar(); render();
     const all = document.querySelectorAll(`details[data-id="${p.id}"] [data-pt]`); if (all.length) all[all.length - 1].focus();
@@ -415,6 +444,7 @@ $('mR').onclick = () => { modo = 'resumo'; mostrarRel(); };
 function aba(x) {
   ['N', 'P', 'R', 'C'].forEach(k => { $('v' + k).classList.toggle('hide', k !== x); $('t' + k).classList.toggle('on', k === x); });
   if (x === 'N') renderNotas();
+  $('fab').classList.toggle('hide', x !== 'P');
   if (x === 'R') mostrarRel();
   if (x === 'P') render();
   window.scrollTo(0, 0);
@@ -467,18 +497,32 @@ $('impF').onchange = e => {
 };
 $('zerar').onclick = () => { if (confirm('Apagar todos os pacientes deste celular?')) { S = novoEstado(); salvar(); render(); } };
 
-// ---------- falar: notas por voz ----------
+// ---------- gravar fala ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, gravando = false, falaFinal = '', falaParcial = '';
+let rec = null, gravando = false, cancelado = false, finalizado = false, falaFinal = '', falaParcial = '', destino = null, t0 = 0, tick = null;
 const hora = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
-function uiMic() {
-  $('mic').classList.toggle('rec', gravando);
-  $('mic').textContent = gravando ? '■' : '🎤';
-  $('aoVivo').classList.toggle('hide', !gravando);
-  if (gravando) $('aoVivo').textContent = 'Ouvindo…';
+function abrirGravacao(pid) {
+  destino = pid || null;
+  const p = destino && S.pacientes.find(x => x.id === destino);
+  $('ovPara').textContent = p ? (p.ident || 'paciente') : 'notas de hoje (o app acha o paciente pelo nome)';
+  $('ovOk').classList.remove('hide'); $('ovCancel').textContent = 'Cancelar';
+  $('ov').classList.remove('hide');
+  if (!SR) { ovErro('Este navegador não grava voz. Abra o Placar pelo Google Chrome.'); return; }
+  falaFinal = ''; falaParcial = ''; cancelado = false; finalizado = false; gravando = true;
+  $('ovTit').textContent = '🔴 Gravando…';
+  $('ovTxt').textContent = p ? 'Pode falar…' : 'Comece pelo nome do paciente. Ex.: “Maria: febre de novo…”';
+  t0 = Date.now(); $('ovTempo').textContent = '0:00'; clearInterval(tick);
+  tick = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('ovTempo').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }, 500);
+  try { ligarRec(); } catch (e) { ovErro('Não consegui ligar o microfone.'); }
 }
+function ovErro(msg) {
+  gravando = false; clearInterval(tick);
+  $('ovTit').textContent = 'Não deu para gravar'; $('ovTxt').textContent = msg;
+  $('ovOk').classList.add('hide'); $('ovCancel').textContent = 'Fechar';
+}
+function fecharOv() { $('ov').classList.add('hide'); clearInterval(tick); }
 function ligarRec() {
   // Uma frase por sessão e religa sozinho: no Android o modo contínuo repete texto.
   rec = new SR(); rec.lang = 'pt-BR'; rec.continuous = false; rec.interimResults = true;
@@ -488,32 +532,46 @@ function ligarRec() {
       const t = e.results[i][0].transcript.trim();
       if (e.results[i].isFinal) falaFinal += (falaFinal ? ' ' : '') + t; else falaParcial += t;
     }
-    $('aoVivo').textContent = (falaFinal + ' ' + falaParcial).trim() || 'Ouvindo…';
+    const txt = (falaFinal + ' ' + falaParcial).trim();
+    if (txt) { $('ovTxt').textContent = txt; $('ovTxt').scrollTop = 1e6; }
   };
   rec.onerror = e => {
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { gravando = false; alert('Permita o uso do microfone para este site (cadeado ao lado do endereço).'); }
-    else if (e.error === 'network') { gravando = false; toast('Sem internet para transcrever: use o 🎤 do teclado na caixa'); }
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') ovErro('O microfone está bloqueado para o Placar. No Chrome: toque no cadeado ao lado do endereço → Permissões → Microfone → Permitir. Depois tente de novo.');
+    else if (e.error === 'network') ovErro('Sem internet para transformar a fala em texto agora. Use “Prefere escrever?” na aba Falar, ou tente de novo quando tiver sinal.');
+    else if (e.error === 'audio-capture') ovErro('Não encontrei microfone neste aparelho.');
   };
-  rec.onend = () => {
-    if (gravando) { try { ligarRec(); } catch (err) { gravando = false; uiMic(); guardarFala(); } }
-    else { uiMic(); guardarFala(); }
-  };
+  rec.onend = () => { if (gravando) { try { ligarRec(); } catch (err) { gravando = false; terminar(); } } else terminar(); };
   rec.start();
 }
-function guardarFala() {
+function terminar() {
+  if (finalizado || $('ovOk').classList.contains('hide')) return;
+  finalizado = true;
   const t = (falaFinal + ' ' + falaParcial).trim(); falaFinal = ''; falaParcial = '';
-  if (t) addNota(t);
+  fecharOv();
+  if (cancelado) return;
+  if (!t) { toast('Não ouvi nada'); return; }
+  const p = destino && S.pacientes.find(x => x.id === destino);
+  if (p) {
+    const n = { id: uid(), h: hora(), t: cap(t), pid: '', ins: '' };
+    S.notas.push(n); atribuir(n, p); salvar(); render(); renderNotas(); toast('Salvo em ' + (p.ident || 'paciente'));
+  } else addNota(t);
 }
 function addNota(t) {
   S.notas.push({ id: uid(), h: hora(), t: cap(t.trim()), pid: '', ins: '' });
   salvar(); renderNotas(); toast('Nota salva');
 }
-$('mic').onclick = () => {
-  if (!SR) { toast('Este navegador não transcreve: use o 🎤 do teclado'); $('notaTxt').focus(); return; }
-  if (gravando) { gravando = false; uiMic(); try { rec.stop(); } catch (e) {} return; }
-  falaFinal = ''; falaParcial = ''; gravando = true; uiMic();
-  try { ligarRec(); } catch (e) { gravando = false; uiMic(); toast('Não consegui ligar o microfone'); }
+$('ovOk').onclick = () => {
+  gravando = false; $('ovTit').textContent = 'Salvando…';
+  try { rec.stop(); } catch (e) {}
+  setTimeout(terminar, 2000); // garantia, caso o navegador não avise o fim
 };
+$('ovCancel').onclick = () => {
+  cancelado = true;
+  if (gravando) { gravando = false; try { rec.abort(); } catch (e) {} }
+  finalizado = true; fecharOv();
+};
+$('mic').onclick = () => abrirGravacao();
+$('fab').onclick = () => abrirGravacao();
 $('notaAdd').onclick = () => { const t = $('notaTxt').value.trim(); if (!t) return; addNota(t); $('notaTxt').value = ''; };
 
 const STOP = new Set(['rn', 'de', 'da', 'do', 'dos', 'das', 'sd', 'paciente', 'leito', 'ano', 'anos', 'mes', 'meses', 'dia', 'dias', 'retorno', 'feminino', 'masculino']);
