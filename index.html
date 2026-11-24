@@ -584,7 +584,7 @@ function registrarGasto(u) {
 }
 function mostrarGasto() {
   $('gastoInfo').textContent = 'Gasto estimado com IA neste celular: US$ ' + (S.gastoIA || 0).toFixed(2) + ' (≈ R$ ' + ((S.gastoIA || 0) * 5.5).toFixed(2) + ')';
-  $('chaveInfo').textContent = lerChave() ? 'Chave salva: ' + lerChave().slice(0, 10) + '…' : 'Nenhuma chave salva.';
+  $('chaveInfo').textContent = lerChave() ? 'Chave salva: ' + lerChave().slice(0, 14) + '… (' + lerChave().length + ' caracteres)' : 'Nenhuma chave salva.';
 }
 async function chamarIA({ system, user, schema, maxTokens = 32000 }) {
   const { c, Anthropic } = await cliente();
@@ -600,7 +600,7 @@ async function chamarIA({ system, user, schema, maxTokens = 32000 }) {
       else throw e;
     }
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) throw new Error('A chave da IA não foi aceita. Confira em Ajustes.');
+    if (e instanceof Anthropic.AuthenticationError) throw new Error('A chave da IA não foi aceita pela Anthropic (chave salva: ' + lerChave().slice(0, 14) + '…, ' + lerChave().length + ' caracteres). Detalhe: ' + (e.message || ''));
     if (e instanceof Anthropic.PermissionDeniedError) throw new Error('A chave não tem permissão para usar o Claude Opus 5.5.');
     if (e instanceof Anthropic.RateLimitError) throw new Error('Muitos pedidos seguidos. Espere um minuto e tente de novo.');
     if (e instanceof Anthropic.BadRequestError) throw new Error(/credit|balance|saldo/i.test(e.message || '') ? 'Acabaram os créditos da API. Recarregue na conta da Anthropic.' : 'A IA não aceitou o pedido: ' + e.message);
@@ -740,7 +740,8 @@ $('btnResIA').onclick = async () => {
 };
 
 $('chaveSalvar').onclick = () => {
-  const k = $('chave').value.trim();
+  // Tira espaços, quebras de linha e aspas que às vezes vêm junto ao copiar do WhatsApp.
+  const k = $('chave').value.replace(/\s+/g, '').replace(/^["'`*]+|["'`*.,;]+$/g, '');
   if (!/^sk-ant-/.test(k)) { alert('A chave da Anthropic começa com “sk-ant-”.'); return; }
   try { localStorage.setItem(CHAVE_KEY, k); } catch (e) {}
   $('chave').value = ''; cli = null; mostrarGasto(); toast('Chave salva neste celular');
