@@ -204,7 +204,7 @@ main{padding-bottom:96px}
     <div class="card">
       <h3>Privacidade</h3>
       <p class="nota">Os pacientes ficam guardados só neste celular. Ao gravar, a fala passa pelo serviço de voz do Google para virar texto, como no ditado do teclado. Ao usar “✨ IA”, as notas e as fichas são enviadas à Anthropic (Claude) para organizar o texto. O placar só sai do celular quando você copia ou envia.</p>
-      <p class="nota">Versão 4 · 23/11/2026</p>
+      <p class="nota">Versão 5 · 23/11/2026</p>
     </div>
   </section>
 </main>
@@ -246,7 +246,7 @@ const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sáb
 
 // ---------- estado ----------
 function novoEstado() { return { medica: '', data: hojeISO(), avisos: '', setores: SETORES_PADRAO.slice(), pacientes: [], notas: [], resumoIA: null, gastoIA: 0 }; }
-function novoPac(setor) { return { id: uid(), setor, ident: '', dx: '', historia: '', atual: '', hoje: '', pendencias: [], alta: false, altaObs: '' }; }
+function novoPac(setor) { return { id: uid(), setor, ident: '', dx: '', historia: '', atual: '', hoje: '', pendencias: [], alta: false, altaObs: '', primeira: false }; }
 function carregar() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.pacientes)) return Object.assign(novoEstado(), s); } catch (e) {}
   return novoEstado();
@@ -272,7 +272,8 @@ const temData = t => /^\s*\d{1,2}\/\d{1,2}/.test(t);
 const datado = t => temData(t) ? t.trim() : ddmm(S.data) + ' – ' + t.trim();
 const ultimaLinha = t => { const ls = String(t).split('\n').map(x => x.trim()).filter(Boolean); return ls[ls.length - 1] || ''; };
 
-function gerar(modo) {
+// mapa: resumos da IA por paciente ({id: texto}); paciente de 1ª vez sempre sai completo.
+function gerar(modo, mapa) {
   const res = modo === 'resumo';
   const L = ['Placar ' + ddmm(S.data) + (res ? ' – resumo' : '')];
   garantirSetores();
@@ -282,13 +283,18 @@ function gerar(modo) {
     if (!ps.length) { L.push('Sem pedidos'); continue; }
     ps.forEach((p, i) => {
       if (i) L.push('');
+      const completoAqui = !res || p.primeira;
       let cab = (i + 1) + ' - ' + (p.ident.trim() || 'Sem identificação');
-      if (res && p.dx.trim()) cab += ' – ' + p.dx.trim();
+      if (!completoAqui && p.dx.trim()) cab += ' – ' + p.dx.trim();
       L.push(cab);
       const atual = p.atual.trim(), hoje = p.hoje.trim();
-      if (!res) {
+      if (completoAqui) {
         if (p.historia.trim()) L.push(p.historia.trim());
         if (hoje) L.push(datado(hoje));
+      } else if (mapa && mapa[p.id]) {
+        L.push(mapa[p.id].trim());
+        if (p.alta) L.push('ALTA HOJE' + (p.altaObs.trim() ? ', ' + p.altaObs.trim() : ''));
+        return;
       } else {
         if (atual) L.push('Atual: ' + atual);
         if (hoje) L.push('Hoje: ' + hoje);
@@ -349,7 +355,7 @@ function cardHTML(p, n, aberto) {
       <button class="mini del" data-prm="${i}" title="Remover">✕</button>
     </div>`).join('');
   const nl = p.historia.trim() ? p.historia.trim().split('\n').length : 0;
-  const tag = p.alta ? '<span class="tag">alta</span>' : (p.hoje.trim() ? '<span class="tag ok">hoje ✓</span>' : '');
+  const tag = (p.primeira ? '<span class="tag">1ª vez</span>' : '') + (p.alta ? '<span class="tag">alta</span>' : (p.hoje.trim() ? '<span class="tag ok">hoje ✓</span>' : ''));
   return `
   <details class="pac ${p.alta ? 'alta' : ''}" data-id="${p.id}" ${aberto ? 'open' : ''}>
     <summary>
@@ -378,6 +384,7 @@ function cardHTML(p, n, aberto) {
       </div>
       <div class="acts">
         <label class="chk"><input type="checkbox" data-f="alta" ${p.alta ? 'checked' : ''}> Alta hoje</label>
+        <label class="chk"><input type="checkbox" data-f="primeira" ${p.primeira ? 'checked' : ''}> 1ª vez (no resumido sai completo)</label>
         <span style="flex:1"></span>
         <button class="mini" data-mv="-1" title="Subir">↑</button>
         <button class="mini" data-mv="1" title="Descer">↓</button>
@@ -411,7 +418,7 @@ $('lista').addEventListener('input', e => {
   const el = e.target, [d, p] = pacDe(el); if (!p) return;
   if (el.dataset.f) {
     p[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.dataset.f === 'setor' || el.dataset.f === 'alta') { salvar(); render(); return; }
+    if (['setor', 'alta', 'primeira'].includes(el.dataset.f)) { salvar(); render(); return; }
     if (el.dataset.f === 'ident') d.querySelector('.tt').textContent = p.ident || 'Sem identificação';
   } else if (el.dataset.pt !== undefined) p.pendencias[+el.dataset.pt].t = el.value;
   else if (el.dataset.pc !== undefined) p.pendencias[+el.dataset.pc].feito = el.checked;
@@ -421,7 +428,7 @@ $('lista').addEventListener('focusout', e => { if (e.target.dataset && e.target.
 $('lista').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.add) {
-    const p = novoPac(b.dataset.add); S.pacientes.push(p); salvar(); render(p.id);
+    const p = novoPac(b.dataset.add); p.primeira = true; S.pacientes.push(p); salvar(); render(p.id);
     const d = document.querySelector(`details[data-id="${p.id}"]`);
     d.scrollIntoView({ behavior: 'smooth', block: 'start' }); d.querySelector('[data-f=ident]').focus();
     return;
@@ -457,8 +464,9 @@ function novoPlantao() {
     if (p.hoje.trim()) p.historia = (p.historia.trim() ? p.historia.trim() + '\n' : '') + datado(p.hoje);
     p.hoje = '';
     p.pendencias = p.pendencias.filter(x => !x.feito && x.t.trim());
+    p.primeira = false;
   });
-  S.data = hojeISO(); S.avisos = '';
+  S.data = hojeISO(); S.avisos = ''; S.resumoIA = null;
   S.notas = S.notas.filter(n => !n.pid);
 }
 $('novoPl').onclick = () => {
@@ -471,7 +479,7 @@ $('novoPl').onclick = () => {
 let modo = 'completo';
 const hashTxt = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
 const resumoValido = () => S.resumoIA && S.resumoIA.h === hashTxt(gerar('completo'));
-function textoPlacar() { return modo === 'resumo' && resumoValido() ? S.resumoIA.t : gerar(modo); }
+function textoPlacar() { return modo === 'resumo' && resumoValido() ? gerar('resumo', S.resumoIA.mapa) : gerar(modo); }
 function mostrarRel() {
   const t = textoPlacar(); $('rel').value = t;
   $('relInfo').textContent = t.length.toLocaleString('pt-BR') + ' caracteres';
@@ -548,7 +556,7 @@ function receberPlacar(txt) {
   for (const { rp, p } of passos) {
     if (rp.alta) continue;
     if (p) {
-      Object.assign(p, { setor: rp.setor, ident: rp.ident, historia: rp.historia, hoje: '', alta: false, altaObs: '' });
+      Object.assign(p, { setor: rp.setor, ident: rp.ident, historia: rp.historia, hoje: '', alta: false, altaObs: '', primeira: false });
       p.pendencias = p.pendencias.filter(x => !x.feito && x.t.trim());
       lista.push(p);
     } else lista.push(rp);
@@ -677,7 +685,7 @@ function aplicarOrganizacao(r) {
     if (!p) {
       if (!a.novo_ident.trim()) continue;
       p = novoPac(normSetor(a.novo_setor.trim() || S.setores[0], S.setores));
-      p.ident = a.novo_ident.trim(); S.pacientes.push(p);
+      p.ident = a.novo_ident.trim(); p.primeira = true; S.pacientes.push(p);
       res.novos.push(p.ident + ' (' + p.setor + ')');
     } else {
       if (a.novo_setor.trim()) p.setor = normSetor(a.novo_setor.trim(), S.setores);
@@ -720,21 +728,33 @@ $('btnDesf').onclick = () => {
   salvar(); render(); renderNotas(); $('iaRes').classList.add('hide'); $('btnDesf').classList.add('hide'); toast('Organização desfeita');
 };
 
-const SYS_RES = `Você gera a versão RESUMIDA do placar de passagem de plantão de uma equipe de neuropediatria, para o grupo de WhatsApp dos médicos.
+const SYS_RES = `Você resume pacientes do placar de passagem de plantão de uma equipe de neuropediatria, para o grupo de WhatsApp dos médicos.
+Para cada paciente recebido, escreva o resumo em no máximo 3 linhas curtas (separadas por quebra de linha): diagnóstico principal; situação atual e medicações-chave com doses; o que mudou hoje e pendências.
 Regras:
-- Mantenha a estrutura do placar recebido: primeira linha "Placar DD/MM – resumo"; os setores no mesmo formato e ordem (#Setor:#); os pacientes com o mesmo número e a mesma identificação.
-- Para cada paciente, no máximo 3 linhas curtas: diagnóstico principal; situação atual e medicações-chave com doses; o que mudou hoje e pendências.
-- Mantenha "ALTA HOJE" (e o retorno) quando houver. Setor sem pacientes: "Sem pedidos".
-- Não invente nada e não omita alta, intercorrência grave ou pendência. Não acrescente comentários fora do placar.
-- Responda só com o texto do placar resumido.
+- Não repita a identificação do paciente nem escreva "ALTA HOJE": o app acrescenta.
+- Não invente nada e não omita intercorrência grave, mudança de dose ou pendência.
+- Um item em "resumos" por paciente recebido, com o mesmo paciente_id.
 ${ESTILO}`;
+const SCHEMA_RES = {
+  type: 'object', additionalProperties: false, required: ['resumos'],
+  properties: { resumos: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['paciente_id', 'texto'],
+    properties: { paciente_id: { type: 'string' }, texto: { type: 'string' } } } } }
+};
 $('btnResIA').onclick = async () => {
   if (!lerChave()) { alert('Para usar a IA, cole a chave da API em Ajustes → Inteligência artificial.'); aba('C'); return; }
   const completo = gerar('completo');
-  ocupado('✨ A IA está resumindo o placar…');
+  // Paciente de 1ª vez não vai para a IA: no resumido ele sai completo.
+  const alvo = S.pacientes.filter(p => !p.primeira).map(p => ({
+    paciente_id: p.id, setor: p.setor, ident: p.ident, dx: p.dx, atual: p.atual, alta: p.alta,
+    historico: p.historia, hoje: p.hoje.trim() ? datado(p.hoje) : '',
+    pendencias: p.pendencias.filter(x => x.t.trim() && !x.feito).map(x => x.t)
+  }));
+  if (!alvo.length) { S.resumoIA = { h: hashTxt(completo), mapa: {} }; salvar(); mostrarRel(); toast('Todos são de 1ª vez: saem completos'); return; }
+  ocupado('✨ A IA está resumindo ' + alvo.length + ' paciente(s)…');
   try {
-    const t = await chamarIA({ system: SYS_RES, user: completo, maxTokens: 16000 });
-    S.resumoIA = { h: hashTxt(completo), t }; salvar(); mostrarRel(); toast('Resumido pronto');
+    const r = await chamarIA({ system: SYS_RES, user: 'Data do placar: ' + ddmm(S.data) + '\n\nPACIENTES (JSON):\n' + JSON.stringify(alvo), schema: SCHEMA_RES, maxTokens: 16000 });
+    const mapa = {}; (r.resumos || []).forEach(x => { if (x.texto.trim()) mapa[x.paciente_id] = x.texto.trim(); });
+    S.resumoIA = { h: hashTxt(completo), mapa }; salvar(); mostrarRel(); toast('Resumido pronto');
   } catch (e) { alert(e.message || String(e)); }
   finally { livre(); }
 };
